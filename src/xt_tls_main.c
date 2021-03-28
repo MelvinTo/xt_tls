@@ -17,7 +17,7 @@
 #include "hostset.h"
 
 // The maximum number of host sets
-static int max_host_sets = 8;
+static int max_host_sets = 16;
 module_param(max_host_sets, int, S_IRUGO);
 MODULE_PARM_DESC(max_host_sets, "host set table capacity (default 8)");
 
@@ -239,11 +239,26 @@ static int get_tls_hostname(const struct sk_buff *skb, char **dest)
 	return EPROTO;
 }
 
+static int get_index_by_name(const char *name) {
+	int index = 0;
+	int i;
+	bool found = false;
+	for (i = 0; i < max_host_sets; i++) {
+		found = !hs_is_free(&host_set_table[i]) && strcmp(host_set_table[i].name, name) == 0;
+		if (found) {
+			index = i;
+			break;
+		}		
+	}
+	return index;
+}
+
 static bool tls_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	char *parsed_host;
 	const struct xt_tls_info *info = par->matchinfo;
 	int result;
+	int index = get_index_by_name(info->host_or_set_name);
 	
 	int pattern_type = (info->op_flags & XT_TLS_OP_HOSTSET) ?
 	    XT_TLS_OP_HOSTSET : XT_TLS_OP_HOST;
@@ -261,7 +276,7 @@ static bool tls_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		match = glob_match(info->host_or_set_name, parsed_host);
 		break;
 	    case XT_TLS_OP_HOSTSET:
-		match = hs_lookup(&host_set_table[info->hostset_index], 
+		match = hs_lookup(&host_set_table[index], 
 			parsed_host, suffix_matching);
 		break;
 	}//switch
@@ -328,12 +343,11 @@ static int tls_mt_check (const struct xt_mtchk_param *par)
 		    return rc;
 	    }//if
 	    
-	    match_info->hostset_index = i;
+	    // match_info->hostset_index = i;
 	}//if
 
 	return 0;
 }
-
 
 static void tls_mt_destroy(const struct xt_mtdtor_param *par)
 {
@@ -343,7 +357,7 @@ static void tls_mt_destroy(const struct xt_mtdtor_param *par)
 		match_info->op_flags, match_info->hostset_index);
 #endif
 	if (match_info->op_flags & XT_TLS_OP_HOSTSET) {
-	    hs_free(&host_set_table[match_info->hostset_index]);
+		hs_free(&host_set_table[get_index_by_name(match_info->host_or_set_name)]);		
 	}//if
 }//tls_mt_destroy
 
