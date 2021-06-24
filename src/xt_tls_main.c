@@ -10,6 +10,7 @@
 #include <linux/tcp.h>
 #include <linux/inet.h>
 #include <linux/proc_fs.h>
+#include <net/net_namespace.h>
 #include <asm/errno.h>
 
 #include "compat.h"
@@ -375,66 +376,56 @@ static struct xt_match tls_mt_regs[] __read_mostly = {
 };
 
 
-static int __net_init tls_net_init(struct net *net)
+static int create_procfs(void)
 {
-    proc_fs_dir = proc_mkdir(KBUILD_MODNAME, net->proc_net);
-    if (! proc_fs_dir) {
-	pr_err("Cannot create /proc/net/%s for this module\n", KBUILD_MODNAME);
-	return -EFAULT;
+    if(!proc_fs_dir) { // skip if already created, unlikely to happen
+        proc_fs_dir = proc_mkdir(KBUILD_MODNAME, init_net.proc_net);
+        if (! proc_fs_dir) {
+            pr_err("Cannot create /proc/net/%s for this module\n", KBUILD_MODNAME);
+            return -EFAULT;
+        }//if
     }//if
 
-    proc_fs_hostset_dir = proc_mkdir(PROC_FS_HOSTSET_SUBDIR, proc_fs_dir);
-    if (! proc_fs_hostset_dir) {
-	pr_err("Cannot create /proc/net/%s/%s for this module\n", KBUILD_MODNAME, PROC_FS_HOSTSET_SUBDIR);
-	return -EFAULT;
-    }//if
+    if(!proc_fs_hostset_dir) {
+        proc_fs_hostset_dir = proc_mkdir(PROC_FS_HOSTSET_SUBDIR, proc_fs_dir);
+        if (! proc_fs_hostset_dir) {
+            pr_err("Cannot create /proc/net/%s/%s for this module\n", KBUILD_MODNAME, PROC_FS_HOSTSET_SUBDIR);
+            return -EFAULT;
+        }//if
+    }
+
     return 0;
-}//tls_net_init
+}//create_procfs
 
 
-static void __net_exit tls_net_exit(struct net *net)
+static void cleanup_procfs(void)
 {
     if (proc_fs_hostset_dir) {
     	proc_remove(proc_fs_hostset_dir);
-	proc_fs_hostset_dir = NULL;
+        proc_fs_hostset_dir = NULL;
     }
     if (proc_fs_dir) {
     	proc_remove(proc_fs_dir);
-	proc_fs_dir = NULL;
+        proc_fs_dir = NULL;
     }
-}//tls_net_exit
-
-
-static struct pernet_operations tls_net_ops = {
-    .init = tls_net_init,
-    .exit = tls_net_exit,
-};
-
+}//cleanup_procfs
 
 static int __init tls_mt_init (void)
 {
-	int i;
-	int rc = xt_register_matches(tls_mt_regs, ARRAY_SIZE(tls_mt_regs));
+	int i, rc;
+	create_procfs();
+	rc = xt_register_matches(tls_mt_regs, ARRAY_SIZE(tls_mt_regs));
 	if (rc)
 	    return rc;
-	
-	rc = register_pernet_subsys(&tls_net_ops);
-	if (rc) {
-	    pr_err("Cannot register pernet subsys for tls_net_ops, error code: %d\n", rc);
-	    xt_unregister_matches(tls_mt_regs, ARRAY_SIZE(tls_mt_regs));
-	    return rc;
-	}//if
 	
 	host_set_table = kmalloc(sizeof (struct host_set) * max_host_sets, GFP_KERNEL);
 	if (! host_set_table) {
 	    pr_err("Cannot allocate memory for the host set table\n");
-	    unregister_pernet_subsys(&tls_net_ops);
 	    xt_unregister_matches(tls_mt_regs, ARRAY_SIZE(tls_mt_regs));
 	    return -ENOMEM;
 	}//if
-#ifdef XT_TLS_DEBUG
+    
 	pr_info("Host set table allocated (%u elements max)\n", max_host_sets);
-#endif
 	
 	for (i = 0; i < max_host_sets; i++)
 	    hs_zeroize(&host_set_table[i]);
@@ -449,8 +440,8 @@ static void __exit tls_mt_exit (void)
 	for (i = 0; i < max_host_sets; i++)
 	    hs_destroy(&host_set_table[i]);
 	kfree(host_set_table);
-	unregister_pernet_subsys(&tls_net_ops);
 	xt_unregister_matches(tls_mt_regs, ARRAY_SIZE(tls_mt_regs));
+    cleanup_procfs();
 	pr_info("deregistered");
 }
 

@@ -47,6 +47,8 @@ int hs_init(struct host_set *hs, const char *name)
     hs->hosts = RB_ROOT;
     hs->filesize = 0;
     
+    pr_info("Creating procfs file for host set /proc/net/xt_tls/hostset/%s\n", name);
+
     hs->proc_file = proc_create_data(name, 0644, proc_fs_hostset_dir, 
 	    &proc_fops, hs);
     if (! hs->proc_file) {
