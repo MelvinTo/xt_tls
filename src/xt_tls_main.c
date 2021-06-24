@@ -17,15 +17,16 @@
 #include "hostset.h"
 
 // The maximum number of host sets
-static int max_host_sets = 8;
+static int max_host_sets = 100;
 module_param(max_host_sets, int, S_IRUGO);
-MODULE_PARM_DESC(max_host_sets, "host set table capacity (default 8)");
+MODULE_PARM_DESC(max_host_sets, "host set table capacity (default 100)");
 
 // The table of the host sets we use
 static struct host_set *host_set_table;
 
 // The proc-fs subdirectory for hostsets
-struct proc_dir_entry *proc_fs_dir, *proc_fs_hostset_dir;
+struct proc_dir_entry *proc_fs_dir = NULL;
+struct proc_dir_entry *proc_fs_hostset_dir = NULL;
 
 /*
  * Searches through skb->data and looks for a
@@ -377,9 +378,14 @@ static struct xt_match tls_mt_regs[] __read_mostly = {
 static int __net_init tls_net_init(struct net *net)
 {
     proc_fs_dir = proc_mkdir(KBUILD_MODNAME, net->proc_net);
+    if (! proc_fs_dir) {
+	pr_err("Cannot create /proc/net/%s for this module\n", KBUILD_MODNAME);
+	return -EFAULT;
+    }//if
+
     proc_fs_hostset_dir = proc_mkdir(PROC_FS_HOSTSET_SUBDIR, proc_fs_dir);
     if (! proc_fs_hostset_dir) {
-	pr_err("Cannot create /proc/net/ subdirectory for this module\n");
+	pr_err("Cannot create /proc/net/%s/%s for this module\n", KBUILD_MODNAME, PROC_FS_HOSTSET_SUBDIR);
 	return -EFAULT;
     }//if
     return 0;
@@ -388,8 +394,14 @@ static int __net_init tls_net_init(struct net *net)
 
 static void __net_exit tls_net_exit(struct net *net)
 {
-    proc_remove(proc_fs_hostset_dir);
-    proc_remove(proc_fs_dir);
+    if (proc_fs_hostset_dir) {
+    	proc_remove(proc_fs_hostset_dir);
+	proc_fs_hostset_dir = NULL;
+    }
+    if (proc_fs_dir) {
+    	proc_remove(proc_fs_dir);
+	proc_fs_dir = NULL;
+    }
 }//tls_net_exit
 
 
@@ -408,15 +420,15 @@ static int __init tls_mt_init (void)
 	
 	rc = register_pernet_subsys(&tls_net_ops);
 	if (rc) {
-	    pr_err("Cannot register pernet subsys\n");
+	    pr_err("Cannot register pernet subsys for tls_net_ops, error code: %d\n", rc);
 	    xt_unregister_matches(tls_mt_regs, ARRAY_SIZE(tls_mt_regs));
-	    unregister_pernet_subsys(&tls_net_ops);
 	    return rc;
 	}//if
 	
 	host_set_table = kmalloc(sizeof (struct host_set) * max_host_sets, GFP_KERNEL);
 	if (! host_set_table) {
 	    pr_err("Cannot allocate memory for the host set table\n");
+	    unregister_pernet_subsys(&tls_net_ops);
 	    xt_unregister_matches(tls_mt_regs, ARRAY_SIZE(tls_mt_regs));
 	    return -ENOMEM;
 	}//if
@@ -433,15 +445,13 @@ static int __init tls_mt_init (void)
 static void __exit tls_mt_exit (void)
 {
 	int i;
-	xt_unregister_matches(tls_mt_regs, ARRAY_SIZE(tls_mt_regs));
-	
+	pr_info("deregistering kernel module...");
 	for (i = 0; i < max_host_sets; i++)
 	    hs_destroy(&host_set_table[i]);
 	kfree(host_set_table);
 	unregister_pernet_subsys(&tls_net_ops);
-#ifdef XT_TLS_DEBUG
-	pr_info("Host set table disposed\n");
-#endif
+	xt_unregister_matches(tls_mt_regs, ARRAY_SIZE(tls_mt_regs));
+	pr_info("deregistered");
 }
 
 module_init(tls_mt_init);
