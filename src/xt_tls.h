@@ -1,6 +1,8 @@
 #ifndef _XT_TLS_TARGET_H
 #define _XT_TLS_TARGET_H
 
+#include <linux/types.h>
+
 #define XT_TLS_OP_HOST      0x01
 #define XT_TLS_OP_HOSTSET   0x02
 #define XT_TLS_OP_SUFFIX    0x04
@@ -18,5 +20,7 @@ struct xt_tls_info {
 #define PROC_FS_MODULE_DIR "xt_tls"
 #define PROC_FS_HOSTSET_SUBDIR "hostset"
 extern struct proc_dir_entry *proc_fs_hostset_dir;
+extern uid_t hostset_uid;
+extern gid_t hostset_gid;
 
 #endif /* _XT_TLS_TARGET_H */

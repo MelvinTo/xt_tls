@@ -8,6 +8,7 @@
 #include <linux/string.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
+#include <linux/types.h>
 #include <linux/inet.h>
 #include <linux/proc_fs.h>
 #include <net/net_namespace.h>
@@ -19,8 +20,19 @@
 
 // The maximum number of host sets
 static int max_host_sets = 100;
+
+// uid/gid for hostset file
+uid_t hostset_uid = 1000;
+gid_t hostset_gid = 1000;
+
 module_param(max_host_sets, int, S_IRUGO);
 MODULE_PARM_DESC(max_host_sets, "host set table capacity (default 100)");
+
+module_param(hostset_uid, int, S_IRUGO);
+MODULE_PARM_DESC(hostset_uid, "uid for hostset file (default 1000)");
+
+module_param(hostset_gid, int, S_IRUGO);
+MODULE_PARM_DESC(hostset_gid, "gid for hostset file (default 1000)");
 
 // The table of the host sets we use
 static struct host_set *host_set_table;
@@ -28,6 +40,7 @@ static struct host_set *host_set_table;
 // The proc-fs subdirectory for hostsets
 struct proc_dir_entry *proc_fs_dir = NULL;
 struct proc_dir_entry *proc_fs_hostset_dir = NULL;
+
 
 /*
  * Searches through skb->data and looks for a

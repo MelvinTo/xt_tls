@@ -36,8 +36,8 @@ static struct file_operations proc_fops = {
 // Initialize a host set
 int hs_init(struct host_set *hs, const char *name)
 {
-    kuid_t uid = make_kuid(&init_user_ns, 0);
-    kgid_t gid = make_kgid(&init_user_ns, 0);
+    kuid_t uid = make_kuid(&init_user_ns, hostset_uid);
+    kgid_t gid = make_kgid(&init_user_ns, hostset_gid);
     
     if (strlen(name) > MAX_HOSTSET_NAME_LEN)
         return -EINVAL;
@@ -207,6 +207,7 @@ static void hs_flush(struct host_set *hs)
 static void _hs_destroy(struct host_set *hs)
 {
     hs->refcount = 0;
+    pr_info("Deleting procfs file for host set /proc/net/xt_tls/hostset/%s\n", hs->name);
     proc_remove(hs->proc_file);
     hs_flush(hs);
 }//_hs_destroy
