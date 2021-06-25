@@ -36,8 +36,8 @@ static struct file_operations proc_fops = {
 // Initialize a host set
 int hs_init(struct host_set *hs, const char *name)
 {
-    kuid_t uid = make_kuid(&init_user_ns, 0);
-    kgid_t gid = make_kgid(&init_user_ns, 0);
+    kuid_t uid = make_kuid(&init_user_ns, hostset_uid);
+    kgid_t gid = make_kgid(&init_user_ns, hostset_gid);
     
     if (strlen(name) > MAX_HOSTSET_NAME_LEN)
         return -EINVAL;
