@@ -254,6 +254,54 @@ static int get_tls_hostname(const struct sk_buff *skb, char **dest)
 	return EPROTO;
 }
 
+// RETURN VALUE
+// 0 - matched
+// 1 - not matched
+// Example:
+//   str => www.google.com
+//   suffix => google.com
+//   str should end with ".google.com"
+static int match_dot_suffix(const char *hostname, const char *suffix)
+{
+    size_t hlen, slen;
+    
+    if (!hostname || !suffix)
+        return 1;
+    
+    hlen = strlen(hostname);
+    slen = strlen(suffix);
+    
+    if (slen + 1 > hlen) // 1 is the dot
+        return 1;
+    
+    if (strncmp(hostname + hlen - slen, suffix, slen) != 0) {
+        return 1;
+    }
+
+    if (hostname[hlen - slen - 1] == '.') {
+        return 0;
+    }
+
+    return 1;
+}
+
+// pattern example: *.google.com, google.com, facebook.com
+// host: www.google.com, www.facebook.com
+static int combo_match(const char* pattern, const char* host, bool suffix_matching)
+{
+    // use exact match first
+    if(strcmp(pattern, host) == 0) {
+        return 0;
+    }
+
+    // if exact match doesn't match, try suffix matching if suffix_matching is true
+    if (suffix_matching) {
+        return match_dot_suffix(host, pattern);
+    }
+
+    return 1;
+}
+
 static bool tls_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	char *parsed_host;
@@ -273,12 +321,11 @@ static bool tls_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	switch (pattern_type) {
 	    case XT_TLS_OP_HOST:
-		match = glob_match(info->host_or_set_name, parsed_host);
-		break;
+            match = combo_match(info->host_or_set_name, parsed_host, suffix_matching);
+            break;
 	    case XT_TLS_OP_HOSTSET:
-		match = hs_lookup(&host_set_table[info->hostset_index], 
-			parsed_host, suffix_matching);
-		break;
+            match = hs_lookup(&host_set_table[info->hostset_index], parsed_host, suffix_matching);
+            break;
 	}//switch
 
 #ifdef XT_TLS_DEBUG
