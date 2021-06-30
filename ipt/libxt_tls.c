@@ -7,8 +7,7 @@
 
 enum {
 	O_TLS_HOST = 0,
-	O_TLS_HOSTSET = 1,
-	O_TLS_SUFFIX = 2,
+	O_TLS_HOSTSET = 1
 };
 
 static void tls_help(void)
@@ -16,7 +15,7 @@ static void tls_help(void)
 	printf(
 		"tls match options:\n"
 		"  [!] --tls-host hostname\n"
-		"  [!] --tls-hostset [--tls-suffix] hostset-name\n"
+		"  [!] --tls-hostset hostset-name\n"
 		"  --tls-host and --tls-hostset are mutually exclusive\n"
 		"  The content of the hostset <HS> is accessible through "
 		    "/proc/net/"PROC_FS_MODULE_DIR"/"PROC_FS_HOSTSET_SUBDIR"/<HS>\n"
@@ -38,10 +37,6 @@ static const struct xt_option_entry tls_opts[] = {
 		.size = MAX_HOSTSET_NAME_LEN,
 		.flags = XTOPT_INVERT | XTOPT_PUT, XTOPT_POINTER(struct xt_tls_info, host_or_set_name),
 	},
-	{
-		.name = "tls-suffix",
-		.id = O_TLS_SUFFIX,
-	},
 	XTOPT_TABLEEND,
 };
 
@@ -61,9 +56,6 @@ static void tls_parse(struct xt_option_call *cb)
 			if (cb->invert)
 				info->inversion_flags |= XT_TLS_OP_HOSTSET;
 			break;
-		case O_TLS_SUFFIX:
-			info->op_flags |= XT_TLS_OP_SUFFIX;
-			break;
 	}
 }
 
@@ -79,9 +71,8 @@ static void tls_check(struct xt_fcheck_call *cb)
 static void tls_print(const void *ip, const struct xt_entry_match *match, int numeric)
 {
 	const struct xt_tls_info *info = (const struct xt_tls_info *)match->data;
-	char *suffix_match = info->op_flags & XT_TLS_OP_SUFFIX ? "suffix-" : "";
 
-	printf(" TLS %smatch", suffix_match);
+	printf(" TLS match");
 	if (info->op_flags & XT_TLS_OP_HOST) {
 	    bool invert = info->inversion_flags & XT_TLS_OP_HOST;
 	    printf("%s host %s", invert ? " !":"", info->host_or_set_name);
@@ -104,9 +95,7 @@ static void tls_save(const void *ip, const struct xt_entry_match *match)
 
 	if (info->op_flags & XT_TLS_OP_HOSTSET) {
 	    bool invert = info->inversion_flags & XT_TLS_OP_HOSTSET;
-	    char *suffix_match = info->op_flags & XT_TLS_OP_SUFFIX ? " --tls-suffix" : "";
-	    printf("%s --tls-hostset %s%s", invert ? " !":"", info->host_or_set_name,
-		    suffix_match);
+	    printf("%s --tls-hostset %s", invert ? " !":"", info->host_or_set_name);
 	}//if
 }
 

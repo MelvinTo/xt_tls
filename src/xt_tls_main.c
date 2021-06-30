@@ -20,6 +20,8 @@
 
 // The maximum number of host sets
 static int max_host_sets = 100;
+static char* sm_prefix = "*.";
+static size_t sm_prefix_len = 2;
 
 // uid/gid for hostset file
 uid_t hostset_uid = 1000;
@@ -254,6 +256,70 @@ static int get_tls_hostname(const struct sk_buff *skb, char **dest)
 	return EPROTO;
 }
 
+// RETURN VALUE
+//   true - matched
+//   false - unmatched
+// Example:
+//   str => www.google.com
+//   suffix => google.com
+//   str should end with ".google.com"
+static bool match_dot_suffix(const char *hostname, const char *suffix)
+{
+    size_t hlen, slen;
+    
+    if (!hostname || !suffix)
+        return false;
+    
+    hlen = strlen(hostname);
+    slen = strlen(suffix);
+
+    if (slen + 1 > hlen) // 1 is the dot
+        return false;
+
+    if (strncmp(hostname + hlen - slen, suffix, slen) != 0) {
+        return false;
+    }
+
+    if (hostname[hlen - slen - 1] == '.') {
+        return true;
+    }
+
+    return false;
+}
+
+// pattern example: *.google.com, google.com, facebook.com
+// host: www.google.com, www.facebook.com
+// RETURN 
+//   - true - matched
+//   - false - unmatched
+static bool combo_match(const char* pattern, const char* host)
+{
+    bool suffix_matching = false;
+    size_t offset = 0; // pattern offset
+    
+    if(strncmp(pattern, sm_prefix, sm_prefix_len) == 0) {
+        suffix_matching = true;
+        offset = sm_prefix_len;
+    }
+    
+#ifdef XT_TLS_DEBUG
+    pr_info("combo match: pattern %s, host %s, suffix_matching %d\n", pattern, host, suffix_matching);
+#endif
+
+
+    // use exact match first
+    if(strcmp(pattern + offset, host) == 0) {
+        return true;
+    }
+
+    // if exact match doesn't match, try suffix matching if suffix_matching is true
+    if (suffix_matching) {
+        return match_dot_suffix(host, pattern + offset);
+    }
+
+    return false;
+}
+
 static bool tls_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	char *parsed_host;
@@ -265,7 +331,6 @@ static bool tls_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	bool invert = (pattern_type == XT_TLS_OP_HOSTSET) ?
 	    (info->inversion_flags & XT_TLS_OP_HOSTSET) :
 	    (info->inversion_flags & XT_TLS_OP_HOST);
-	bool suffix_matching = info->op_flags & XT_TLS_OP_SUFFIX;
 	bool match;
 
 	if ((result = get_tls_hostname(skb, &parsed_host)) != 0)
@@ -273,12 +338,11 @@ static bool tls_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	switch (pattern_type) {
 	    case XT_TLS_OP_HOST:
-		match = glob_match(info->host_or_set_name, parsed_host);
-		break;
+            match = combo_match(info->host_or_set_name, parsed_host);
+            break;
 	    case XT_TLS_OP_HOSTSET:
-		match = hs_lookup(&host_set_table[info->hostset_index], 
-			parsed_host, suffix_matching);
-		break;
+            match = hs_lookup(&host_set_table[info->hostset_index], parsed_host);
+            break;
 	}//switch
 
 #ifdef XT_TLS_DEBUG

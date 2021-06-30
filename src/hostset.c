@@ -15,6 +15,8 @@
 #include "hostset.h"
 
 static DEFINE_RWLOCK(hs_lock);
+static char* sm_prefix = "*.";
+static size_t sm_prefix_len = 2;
 
 static void hse_free(struct host_set_elem *hse);
 static void strrev(char *dst, const char *src, size_t max_len);
@@ -78,7 +80,16 @@ static struct host_set_elem *hse_create(const char *hostname)
     RB_CLEAR_NODE(&hse->rbnode);
     hse->rbnode.rb_left = hse->rbnode.rb_right = NULL;
     hse->hit_count = 0;
-    strrev(hse->name, hostname, len);
+
+    if(strncmp(hostname, sm_prefix, sm_prefix_len) == 0) {
+        // hse->name only holds the string without "*."
+        hse->suffix_matching = true;
+        strrev(hse->name, hostname + sm_prefix_len, len - sm_prefix_len);
+    } else {
+        hse->suffix_matching = false;
+        strrev(hse->name, hostname, len);
+    }
+
     return hse;
 }//hse_create
 
@@ -151,8 +162,13 @@ static int hs_remove_hostname(struct host_set *hs, const char *hostname)
 	pr_err("Empty host names are not allowed\n");
 	return -EINVAL;
     }//if
-    
-    strrev(hostnamerev, hostname, MAX_HOSTNAME_LEN);
+
+    if(strncmp(hostname, sm_prefix, sm_prefix_len) == 0) {
+        // hse->name only holds the string without "*."
+        strrev(hostnamerev, hostname + sm_prefix_len, MAX_HOSTNAME_LEN);
+    } else {
+        strrev(hostnamerev, hostname, MAX_HOSTNAME_LEN);
+    }
     
     write_lock_bh(&hs_lock);
     
@@ -240,15 +256,15 @@ static void hse_free(struct host_set_elem *hse)
 
 
 // Lookup the host set for the specifed host name
-bool hs_lookup(struct host_set *hs, const char *hostname, bool suffix_matching)
+bool hs_lookup(struct host_set *hs, const char *hostname)
 {
     bool result = false;
-    char pattern[MAX_HOSTNAME_LEN + 1];
+    char revhostname[MAX_HOSTNAME_LEN + 1];
     struct rb_node *node;
     if (! hs->hosts.rb_node)
 	return false;
     
-    strrev(pattern, hostname, MAX_HOSTNAME_LEN);
+    strrev(revhostname, hostname, MAX_HOSTNAME_LEN);
     
     if (! read_trylock(&hs_lock))
 	return false;
@@ -257,17 +273,20 @@ bool hs_lookup(struct host_set *hs, const char *hostname, bool suffix_matching)
     read_lock_bh(&hs_lock);
     for (node = hs->hosts.rb_node; ! result && node;) {
 	struct host_set_elem *hse = rb_entry(node, struct host_set_elem, rbnode);
-	int cmp;
-	if (!suffix_matching) {
-	    cmp = strcmp(pattern, hse->name);
-	} else {
-	    size_t len = strlen(hse->name);
-	    cmp = strncmp(pattern, hse->name, len);
-	    if (cmp == 0 && len < strlen(pattern) && pattern[len] != '.') {
-		  cmp = 1;
-	    }//if
-	}//if
-	
+	int cmp = strcmp(revhostname, hse->name);
+
+    if (cmp != 0 && hse->suffix_matching) { // if not identical and suffix matching is enabled
+	    size_t plen = strlen(hse->name); // len of pattern
+        size_t hlen = strlen(revhostname); // len of actual hostname in reverse
+
+        if(hlen > plen + 1) { // 1 => the dot
+            cmp = strncmp(revhostname, hse->name, plen);
+            if (cmp == 0 && revhostname[plen] != '.') {
+                cmp = 1;
+            }//if
+        }//if
+    }//if
+    
 	if (cmp < 0)
 	    node = node->rb_left;
 	else if (cmp > 0)
@@ -343,6 +362,9 @@ static int seq_read_show(struct seq_file *seq, void *v)
 #endif
     
     seq_printf(seq, "%*llu ", HIT_COUNT_DISPL_WIDTH, hse->hit_count);
+    if(hse->suffix_matching) {
+        seq_printf(seq, "*.");
+    }
     while (--p >= hse->name)
         seq_putc(seq, *p);
     
