@@ -97,16 +97,16 @@ static void tls_save(const void *ip, const struct xt_entry_match *match)
 {
 	const struct xt_tls_info *info = (const struct xt_tls_info *)match->data;
 
+    char *suffix_match = info->op_flags & XT_TLS_OP_SUFFIX ? " --tls-suffix" : "";
+    
 	if (info->op_flags & XT_TLS_OP_HOST) {
 	    bool invert = info->inversion_flags & XT_TLS_OP_HOST;
-	    printf("%s --tls-host %s", invert ? " !":"", info->host_or_set_name);
+	    printf("%s --tls-host %s%s", invert ? " !":"", info->host_or_set_name, suffix_match);
 	}//if
 
 	if (info->op_flags & XT_TLS_OP_HOSTSET) {
 	    bool invert = info->inversion_flags & XT_TLS_OP_HOSTSET;
-	    char *suffix_match = info->op_flags & XT_TLS_OP_SUFFIX ? " --tls-suffix" : "";
-	    printf("%s --tls-hostset %s%s", invert ? " !":"", info->host_or_set_name,
-		    suffix_match);
+	    printf("%s --tls-hostset %s%s", invert ? " !":"", info->host_or_set_name, suffix_match);
 	}//if
 }
 

@@ -30,3 +30,7 @@ module-install:
 	$(DEPMOD) -b "$(DEPMODBASEDIR)" -a $(KERNELRELEASE)
 
 install: module-install
+
+reload: all
+	(lsmod | grep -w xt_[t]ls && sudo rmmod xt_tls) || true
+	sudo insmod xt_tls.ko

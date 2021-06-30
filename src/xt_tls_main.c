@@ -255,43 +255,50 @@ static int get_tls_hostname(const struct sk_buff *skb, char **dest)
 }
 
 // RETURN VALUE
-// 0 - matched
-// 1 - not matched
+//   true - matched
+//   false - unmatched
 // Example:
 //   str => www.google.com
 //   suffix => google.com
 //   str should end with ".google.com"
-static int match_dot_suffix(const char *hostname, const char *suffix)
+static bool match_dot_suffix(const char *hostname, const char *suffix)
 {
     size_t hlen, slen;
     
     if (!hostname || !suffix)
-        return 1;
+        return false;
     
     hlen = strlen(hostname);
     slen = strlen(suffix);
-    
+
     if (slen + 1 > hlen) // 1 is the dot
-        return 1;
-    
+        return false;
+
     if (strncmp(hostname + hlen - slen, suffix, slen) != 0) {
-        return 1;
+        return false;
     }
 
     if (hostname[hlen - slen - 1] == '.') {
-        return 0;
+        return true;
     }
 
-    return 1;
+    return false;
 }
 
 // pattern example: *.google.com, google.com, facebook.com
 // host: www.google.com, www.facebook.com
-static int combo_match(const char* pattern, const char* host, bool suffix_matching)
+// RETURN 
+//   - true - matched
+//   - false - unmatched
+static bool combo_match(const char* pattern, const char* host, bool suffix_matching)
 {
+#ifdef XT_TLS_DEBUG
+    pr_info("combo match: pattern %s, host %s, suffix_matching %d\n", pattern, host, suffix_matching);
+#endif
+    
     // use exact match first
     if(strcmp(pattern, host) == 0) {
-        return 0;
+        return true;
     }
 
     // if exact match doesn't match, try suffix matching if suffix_matching is true
@@ -299,7 +306,7 @@ static int combo_match(const char* pattern, const char* host, bool suffix_matchi
         return match_dot_suffix(host, pattern);
     }
 
-    return 1;
+    return false;
 }
 
 static bool tls_mt(const struct sk_buff *skb, struct xt_action_param *par)
