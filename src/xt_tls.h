@@ -7,7 +7,7 @@
 #define XT_TLS_OP_HOSTSET   0x02
 
 #define MAX_HOSTNAME_LEN 255
-#define MAX_HOSTSET_NAME_LEN 31
+#define MAX_HOSTSET_NAME_LEN 63
 
 /* target info */
 struct xt_tls_info {
